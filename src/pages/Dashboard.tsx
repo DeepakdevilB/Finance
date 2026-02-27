@@ -41,6 +41,8 @@ export default function Dashboard() {
   const [isEditingLimit, setIsEditingLimit] = useState(false);
   const [tempLimit, setTempLimit] = useState('');
 
+  const [showInvestModal, setShowInvestModal] = useState(false);
+
   const saveLimit = () => {
     const val = parseFloat(tempLimit);
     if (!isNaN(val)) {
@@ -106,14 +108,33 @@ export default function Dashboard() {
     
     // Calculate current savings again to ensure it's up to date
     const currentTotalSavings = Math.max(0, totalIncome - totalExpenses);
+    const targetAmount = parseFloat(newGoal.amount);
+    const deadline = new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0];
 
-    const { error } = await supabase.from('goals').upsert({
-      user_id: user.id,
-      title: 'General Savings',
-      target_amount: parseFloat(newGoal.amount),
-      deadline: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
-      current_saved: currentTotalSavings
-    }, { onConflict: 'user_id, title' });
+    let error;
+
+    if (goals.length > 0) {
+      // Update existing goal
+      const { error: updateError } = await supabase
+        .from('goals')
+        .update({
+          target_amount: targetAmount,
+          current_saved: currentTotalSavings,
+          deadline: deadline
+        })
+        .eq('id', goals[0].id);
+      error = updateError;
+    } else {
+      // Insert new goal
+      const { error: insertError } = await supabase.from('goals').insert({
+        user_id: user.id,
+        title: 'General Savings',
+        target_amount: targetAmount,
+        deadline: deadline,
+        current_saved: currentTotalSavings
+      });
+      error = insertError;
+    }
     
     if (!error) {
       setShowSetGoal(false);
@@ -158,6 +179,54 @@ export default function Dashboard() {
     setGeneratingBudget(false);
     setShowBudgetModal(true);
   };
+
+  const INVESTMENT_OPTIONS = [
+    {
+      title: 'Fixed Deposits (FD)',
+      risk: 'Low',
+      riskColor: 'text-emerald-600',
+      returns: '6-7%',
+      pros: ['Guaranteed returns', 'Very safe', 'Easy to open'],
+      cons: ['Low returns (barely beats inflation)', 'Lock-in period', 'Taxable interest'],
+      desc: 'Best for short-term goals (1-3 years) and emergency funds.'
+    },
+    {
+      title: 'Mutual Funds (Index/Large Cap)',
+      risk: 'Medium',
+      riskColor: 'text-amber-600',
+      returns: '10-12%',
+      pros: ['Better returns than FD', 'Professional management', 'Diversification', 'Liquidity'],
+      cons: ['Market risk (value fluctuates)', 'Expense ratio fees', 'Not guaranteed'],
+      desc: 'Best for medium to long-term goals (3-5+ years). SIP is the best way to start.'
+    },
+    {
+      title: 'Stock Market',
+      risk: 'High',
+      riskColor: 'text-red-600',
+      returns: '12-15%+',
+      pros: ['Highest potential returns', 'Ownership in companies', 'Dividend income'],
+      cons: ['High risk of loss', 'Requires knowledge & time', 'Volatile'],
+      desc: 'Best for long-term wealth creation (10+ years) if you have knowledge.'
+    },
+    {
+      title: 'Gold (SGB/Digital)',
+      risk: 'Low-Medium',
+      riskColor: 'text-amber-600',
+      returns: '8-10%',
+      pros: ['Hedge against inflation', 'Safe asset', 'SGB gives extra 2.5% interest'],
+      cons: ['Price fluctuates', 'Physical gold has making charges', 'SGB has lock-in'],
+      desc: 'Good for portfolio diversification.'
+    },
+    {
+      title: 'PPF (Public Provident Fund)',
+      risk: 'Very Low',
+      riskColor: 'text-emerald-600',
+      returns: '7.1%',
+      pros: ['Tax-free returns', 'Government backed', 'Safe'],
+      cons: ['15-year lock-in', 'Limit of ₹1.5L/year'],
+      desc: 'Best for retirement planning and tax saving.'
+    }
+  ];
 
   if (loading) return <div className="p-8 text-center text-slate-500">{t('loading')}</div>;
   if (!profile) return <div className="p-8 text-center text-slate-500">Profile not found. Please complete onboarding.</div>;
@@ -224,65 +293,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Financial Health Overview Section */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center relative overflow-hidden">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">Financial Stability Score</h3>
-        
-        <div className="relative w-64 h-32 mb-4">
-          <svg viewBox="0 0 200 100" className="w-full h-full">
-            <defs>
-              <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ef4444" />
-                <stop offset="50%" stopColor="#eab308" />
-                <stop offset="100%" stopColor="#22c55e" />
-              </linearGradient>
-            </defs>
-            {/* Background Arc */}
-            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e2e8f0" strokeWidth="20" strokeLinecap="round" />
-            {/* Colored Arc */}
-            <path 
-              d="M 20 100 A 80 80 0 0 1 180 100" 
-              fill="none" 
-              stroke="url(#gaugeGradient)" 
-              strokeWidth="20" 
-              strokeLinecap="round" 
-              strokeDasharray="251.2" 
-              strokeDashoffset={251.2 - (251.2 * healthScore / 100)}
-              className="transition-all duration-1000 ease-out"
-            />
-            {/* Needle */}
-            <line 
-              x1="100" 
-              y1="100" 
-              x2="100" 
-              y2="30" 
-              stroke="#1e293b" 
-              strokeWidth="4" 
-              strokeLinecap="round"
-              className="transition-all duration-1000 ease-out"
-              style={{ 
-                transformOrigin: '100px 100px',
-                transform: `rotate(${(healthScore / 100) * 180 - 90}deg)` 
-              }}
-            />
-            <circle cx="100" cy="100" r="6" fill="#1e293b" />
-          </svg>
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 text-4xl font-bold text-slate-800">
-            {healthScore}
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <p className="text-3xl font-bold text-slate-700">
-            You can survive <span className="text-emerald-600">{
-              totalExpenses > 0 
-                ? Math.floor((totalSavings / (totalExpenses / 30))) 
-                : '∞'
-            } days</span> without income.
-          </p>
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Savings Goal Progression */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 h-full">
@@ -311,6 +321,16 @@ export default function Dashboard() {
               ></div>
             </div>
             <p className="text-xs text-center text-slate-400">{progressPercent}% of your goal reached!</p>
+            
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <button 
+                onClick={() => setShowInvestModal(true)}
+                className="w-full py-2 bg-emerald-50 text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <TrendingUp size={16} />
+                {t('how_to_grow')}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="text-center py-4">
@@ -455,6 +475,100 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Investment Modal */}
+      {showInvestModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50 shrink-0 rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-100 p-2.5 rounded-full text-emerald-600 shadow-sm">
+                  <TrendingUp size={22} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg">{t('investment_options')}</h3>
+                  <p className="text-xs text-slate-500 font-medium">{t('grow_savings')}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowInvestModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-xl border border-blue-100 text-sm text-blue-900 shadow-sm">
+                <p className="font-bold mb-1 text-base flex items-center gap-2">
+                  <Sparkles size={16} className="text-blue-600" /> 
+                  {t('why_invest')}
+                </p>
+                <p className="leading-relaxed opacity-90">{t('why_invest_desc')}</p>
+              </div>
+              
+              <div className="grid gap-4">
+                {INVESTMENT_OPTIONS.map((opt, idx) => (
+                  <div key={idx} className="group border border-slate-200 rounded-xl p-5 hover:border-emerald-300 hover:shadow-md transition-all bg-white hover:bg-emerald-50/10">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="font-bold text-slate-800 text-lg group-hover:text-emerald-700 transition-colors">{opt.title}</h4>
+                        <p className="text-sm text-slate-500 mt-0.5">{opt.desc}</p>
+                      </div>
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full bg-slate-50 ${opt.riskColor} border border-slate-100 shadow-sm`}>
+                        {opt.risk} {t('risk')}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 mb-5 text-sm">
+                      <span className="text-slate-500 font-medium">{t('est_returns')}:</span>
+                      <span className="font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-md border border-emerald-200">{opt.returns}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      <div className="bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-100/50">
+                        <span className="font-bold text-emerald-700 block mb-2.5 flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
+                          <PlusCircle size={12} /> {t('pros')}
+                        </span>
+                        <ul className="space-y-2">
+                          {opt.pros.map((p, i) => (
+                            <li key={i} className="flex items-start gap-2 text-slate-700">
+                              <span className="text-emerald-500 mt-0.5 text-[10px]">●</span>
+                              {p}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="bg-red-50/50 p-3.5 rounded-xl border border-red-100/50">
+                        <span className="font-bold text-red-700 block mb-2.5 flex items-center gap-1.5 uppercase tracking-wide text-[10px]">
+                          <ShieldAlert size={12} /> {t('cons')}
+                        </span>
+                        <ul className="space-y-2">
+                          {opt.cons.map((c, i) => (
+                            <li key={i} className="flex items-start gap-2 text-slate-700">
+                              <span className="text-red-500 mt-0.5 text-[10px]">●</span>
+                              {c}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end shrink-0 rounded-b-2xl">
+              <button 
+                onClick={() => setShowInvestModal(false)}
+                className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-all shadow-sm hover:shadow active:scale-95"
+              >
+                {t('close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
           {/* Quick Actions */}
@@ -541,7 +655,7 @@ export default function Dashboard() {
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                 <BarChart3 size={20} className="text-blue-500" />
-                Monthly Expenses
+                {t('monthly_expense')}
               </h3>
               <div className="flex items-center gap-2">
                 {isEditingLimit ? (
@@ -551,10 +665,10 @@ export default function Dashboard() {
                       value={tempLimit}
                       onChange={(e) => setTempLimit(e.target.value)}
                       className="w-24 p-1 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Limit"
+                      placeholder={t('limit')}
                     />
-                    <button onClick={saveLimit} className="text-emerald-600 text-xs font-bold bg-emerald-50 px-2 py-1 rounded">Save</button>
-                    <button onClick={() => setIsEditingLimit(false)} className="text-slate-400 text-xs px-2 py-1">Cancel</button>
+                    <button onClick={saveLimit} className="text-emerald-600 text-xs font-bold bg-emerald-50 px-2 py-1 rounded">{t('save')}</button>
+                    <button onClick={() => setIsEditingLimit(false)} className="text-slate-400 text-xs px-2 py-1">{t('cancel')}</button>
                   </div>
                 ) : (
                   <button 
@@ -562,7 +676,7 @@ export default function Dashboard() {
                     className="flex items-center gap-1 text-slate-500 hover:text-blue-600 transition-colors text-xs bg-slate-50 px-2 py-1 rounded-lg"
                   >
                     <Settings size={14} />
-                    {monthlyLimit > 0 ? `Limit: ₹${monthlyLimit}` : 'Set Limit'}
+                    {monthlyLimit > 0 ? `${t('limit')}: ₹${monthlyLimit}` : t('set_limit')}
                   </button>
                 )}
               </div>
@@ -571,9 +685,9 @@ export default function Dashboard() {
             {monthlyLimit > 0 && (
               <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
                 <div className="flex justify-between text-xs mb-2 font-medium">
-                  <span className="text-slate-500">Monthly Budget</span>
+                  <span className="text-slate-500">{t('monthly_budget')}</span>
                   <span className={totalExpenses > monthlyLimit ? "text-red-500" : "text-emerald-500"}>
-                    {totalExpenses > monthlyLimit ? "Over Budget" : "Within Budget"}
+                    {totalExpenses > monthlyLimit ? t('over_budget') : t('within_budget')}
                   </span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
